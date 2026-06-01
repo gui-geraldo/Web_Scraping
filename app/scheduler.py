@@ -1,10 +1,17 @@
 """Agendamento das checagens com APScheduler (AsyncIOScheduler)."""
 from __future__ import annotations
 
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from sqlmodel import select
 
-from .config import MIN_INTERVAL_SECONDS, TIMEZONE
+from .config import (
+    JITTER_FRACTION,
+    JITTER_MAX_SECONDS,
+    MIN_INTERVAL_SECONDS,
+    TIMEZONE,
+)
 from .database import get_session
 from .logging_conf import get_logger
 from .models import Target
@@ -12,7 +19,16 @@ from .monitor import check_target
 
 logger = get_logger("scheduler")
 
-scheduler = AsyncIOScheduler(timezone=TIMEZONE)
+
+def _safe_timezone(name: str):
+    try:
+        return ZoneInfo(name)
+    except (ZoneInfoNotFoundError, ValueError, KeyError):
+        logger.warning("Fuso '%s' inválido — usando UTC.", name)
+        return ZoneInfo("UTC")
+
+
+scheduler = AsyncIOScheduler(timezone=_safe_timezone(TIMEZONE))
 
 
 def _job_id(target_id: int) -> str:
@@ -30,10 +46,14 @@ def schedule_target(target: Target) -> None:
         return
 
     interval = max(int(target.interval_seconds), MIN_INTERVAL_SECONDS)
+    # Variação aleatória (± jitter) aplicada a cada disparo: o intervalo nunca
+    # é exato, imitando um humano. APScheduler sorteia um novo offset por execução.
+    jitter = int(min(interval * JITTER_FRACTION, JITTER_MAX_SECONDS))
     scheduler.add_job(
         check_target,
         trigger="interval",
         seconds=interval,
+        jitter=jitter,
         id=job_id,
         args=[target.id],
         max_instances=1,
@@ -41,7 +61,10 @@ def schedule_target(target: Target) -> None:
         replace_existing=True,
         misfire_grace_time=60,
     )
-    logger.info("Alvo #%s (%s) agendado a cada %ss.", target.id, target.name, interval)
+    logger.info(
+        "Alvo #%s (%s) agendado a cada %ss (± %ss aleatórios).",
+        target.id, target.name, interval, jitter,
+    )
 
 
 def unschedule_target(target_id: int) -> None:

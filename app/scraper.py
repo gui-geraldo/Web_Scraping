@@ -32,7 +32,7 @@ USER_AGENTS = [
 # Script injetado antes de qualquer script da página: esconde sinais de automação.
 STEALTH_JS = """
 Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
-Object.defineProperty(navigator, 'languages', {get: () => ['pt-BR', 'pt', 'en-US', 'en']});
+Object.defineProperty(navigator, 'languages', {get: () => ['pt-BR', 'pt', 'es', 'en']});
 Object.defineProperty(navigator, 'plugins', {get: () => [1, 2, 3, 4, 5]});
 window.chrome = { runtime: {}, app: {}, csi: function(){}, loadTimes: function(){} };
 const originalQuery = window.navigator.permissions.query;
@@ -105,12 +105,14 @@ class BrowserManager:
         assert self._browser is not None
         kwargs = dict(
             user_agent=random.choice(USER_AGENTS),
+            # Fingerprint coerente com o IP de saída (residencial brasileiro).
+            # 'es' entra como idioma secundário — plausível para quem busca vagas na Espanha.
             locale="pt-BR",
             timezone_id="America/Sao_Paulo",
             viewport={"width": 1366, "height": 768},
             ignore_https_errors=True,
             extra_http_headers={
-                "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.8",
+                "Accept-Language": "pt-BR,pt;q=0.9,es;q=0.8,en;q=0.7",
             },
         )
         if proxy:
