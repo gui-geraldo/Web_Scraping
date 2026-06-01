@@ -18,6 +18,15 @@ DATABASE_URL = f"sqlite:///{DB_PATH}"
 
 LOG_FILE = DATA_DIR / "vigia.log"
 
+# Estado do navegador (cookies/localStorage) — persiste a sessão e o cookie do
+# DataDome entre checagens e reinícios, evitando cair no captcha toda hora.
+STATE_FILE = DATA_DIR / "browser_state.json"
+
+# Roda o Chromium em modo gráfico (headful) — bem menos detectável por anti-bots.
+# No servidor Linux isso roda sob um display virtual (Xvfb). Para desenvolver no
+# Windows/macOS sem abrir janela, defina HEADLESS=true.
+HEADLESS = os.getenv("HEADLESS", "false").lower() in ("1", "true", "yes")
+
 # Fuso horário usado pelo scheduler e nos timestamps.
 TIMEZONE = os.getenv("TZ", "Europe/Madrid")
 

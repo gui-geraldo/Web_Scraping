@@ -92,6 +92,27 @@ Se as checagens começarem a falhar ou cair em captcha:
 - Evite frequências muito altas (use minutos, não segundos) para não chamar atenção.
 
 > A frequência mínima é 30s por padrão (configurável em `app/config.py`).
+> As checagens também têm um **jitter** aleatório (o intervalo nunca é exato),
+> para imitar comportamento humano.
+
+### Resolver captcha manualmente (VNC)
+
+O InfoJobs usa **DataDome**. O scraper já roda em modo gráfico (Xvfb) e tenta
+liberar o desafio sozinho, mas se ele insistir você pode **resolver à mão uma vez**:
+
+1. Aba **Configurações → Resolver captcha manualmente (VNC)**.
+2. Clique em **1) Abrir navegador** (abre a página no servidor).
+3. Clique em **2) Abrir VNC** — abre uma aba mostrando a tela do servidor
+   (noVNC, porta **6080**). Resolva o captcha com o mouse.
+4. Volte e clique em **3) Salvar e fechar**.
+
+Os cookies (incl. o `datadome`) ficam salvos em `/data/browser_state.json` e as
+checagens automáticas passam a reutilizá-los. Como o cookie fica **amarrado ao
+IP do servidor**, é importante resolver **a partir do próprio servidor** (via
+noVNC), e não do seu computador.
+
+> 🔒 A porta 6080 dá controle do navegador do servidor. Em rede não confiável,
+> defina `VNC_PASSWORD` no `.env`.
 
 ---
 

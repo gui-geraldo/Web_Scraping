@@ -233,7 +233,28 @@ async function loadSettings() {
       ? `Token salvo: ${s.telegram_bot_token_masked} (deixe vazio para manter)`
       : "Nenhum token salvo.";
   } catch (e) {}
+  // Monta o link do noVNC apontando para o mesmo host, porta 6080.
+  const vnc = $("btn-solve-vnc");
+  if (vnc) vnc.href = `http://${location.hostname}:6080/vnc.html?autoconnect=1&resize=scale`;
 }
+
+// ---------- Captcha manual (VNC) ----------
+$("btn-solve-start").onclick = async () => {
+  const url = $("solve-url").value.trim() || "https://www.infojobs.net";
+  $("solve-msg").textContent = "Abrindo navegador no servidor...";
+  try {
+    const r = await api("/api/solve/start", { method: "POST", body: JSON.stringify({ url }) });
+    $("solve-msg").textContent = r.message + " → agora clique em 'Abrir VNC'.";
+  } catch (e) { $("solve-msg").textContent = "Erro: " + e.message; }
+};
+
+$("btn-solve-save").onclick = async () => {
+  $("solve-msg").textContent = "Salvando sessão...";
+  try {
+    const r = await api("/api/solve/close", { method: "POST" });
+    $("solve-msg").textContent = r.message;
+  } catch (e) { $("solve-msg").textContent = "Erro: " + e.message; }
+};
 
 $("btn-save-settings").onclick = async () => {
   const body = {

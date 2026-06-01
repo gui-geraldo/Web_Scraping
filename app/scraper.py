@@ -9,15 +9,29 @@ Toda a API é assíncrona e roda no mesmo event loop do FastAPI/APScheduler.
 from __future__ import annotations
 
 import asyncio
+import os
 import random
 from dataclasses import dataclass
 from typing import Optional
 
 from playwright.async_api import Browser, async_playwright
 
+from .config import HEADLESS, STATE_FILE
 from .logging_conf import get_logger
 
 logger = get_logger("scraper")
+
+# Marcadores que indicam uma tela de desafio anti-bot (DataDome/Cloudflare/etc).
+CHALLENGE_MARKERS = [
+    "eres humano",
+    "hacer clic para comprobar",
+    "just a moment",
+    "verifying you are human",
+    "captcha-delivery",
+    "are you a robot",
+    "_dd_challenge",
+    "geo.captcha",
+]
 
 # User-Agents reais e recentes para rotação.
 USER_AGENTS = [
@@ -78,6 +92,10 @@ class BrowserManager:
         self._playwright = None
         self._browser: Optional[Browser] = None
         self._lock = asyncio.Lock()
+        self._state_lock = asyncio.Lock()
+        # Sessão manual (resolver captcha via VNC)
+        self._manual_context = None
+        self._manual_page = None
 
     async def start(self) -> None:
         if self._browser:
@@ -85,15 +103,17 @@ class BrowserManager:
         async with self._lock:
             if self._browser:
                 return
-            logger.info("Iniciando Chromium (Playwright)...")
+            mode = "headless" if HEADLESS else "headful (gráfico/Xvfb)"
+            logger.info("Iniciando Chromium (%s)...", mode)
             self._playwright = await async_playwright().start()
             self._browser = await self._playwright.chromium.launch(
-                headless=True,
+                headless=HEADLESS,
                 args=LAUNCH_ARGS,
             )
             logger.info("Chromium pronto.")
 
     async def stop(self) -> None:
+        await self.close_manual_session(save=True)
         if self._browser:
             await self._browser.close()
             self._browser = None
@@ -117,9 +137,22 @@ class BrowserManager:
         )
         if proxy:
             kwargs["proxy"] = _parse_proxy(proxy)
+        # Reaproveita a sessão salva (cookies do DataDome etc.) se existir.
+        if STATE_FILE.exists():
+            kwargs["storage_state"] = str(STATE_FILE)
         context = await self._browser.new_context(**kwargs)
         await context.add_init_script(STEALTH_JS)
         return context
+
+    async def _save_state(self, context) -> None:
+        """Persiste cookies/localStorage para reusar a sessão (evita captcha repetido)."""
+        async with self._state_lock:
+            try:
+                tmp = STATE_FILE.with_suffix(".tmp")
+                await context.storage_state(path=str(tmp))
+                os.replace(tmp, STATE_FILE)
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("Não foi possível salvar o estado do navegador: %s", exc)
 
     async def fetch(
         self,
@@ -147,11 +180,23 @@ class BrowserManager:
             except Exception:
                 pass
 
-            html = await page.content()
+            # Se houver desafio anti-bot, tenta liberar antes de extrair.
+            passed = await self._maybe_solve_challenge(page)
 
+            html = await page.content()
             sel = (selector or "").strip() or "body"
             extracted = await self._extract(page, sel, extract_mode)
 
+            # Salva a sessão (cookies) para a próxima checagem não cair no captcha.
+            await self._save_state(context)
+
+            if not passed:
+                return FetchResult(
+                    ok=False,
+                    html=html,
+                    status=status,
+                    error="Desafio anti-bot (captcha) não foi liberado automaticamente.",
+                )
             return FetchResult(ok=True, html=html, text=extracted, status=status)
         except Exception as exc:  # noqa: BLE001
             logger.warning("Falha ao carregar %s: %s", url, exc)
@@ -159,6 +204,102 @@ class BrowserManager:
         finally:
             if context:
                 await context.close()
+
+    async def _is_challenged(self, page) -> bool:
+        try:
+            title = (await page.title()).lower()
+        except Exception:
+            title = ""
+        try:
+            body = (await page.content()).lower()
+        except Exception:
+            body = ""
+        haystack = f"{title} {body[:5000]}"
+        return any(marker in haystack for marker in CHALLENGE_MARKERS)
+
+    async def _maybe_solve_challenge(self, page, max_wait_s: int = 30) -> bool:
+        """Detecta desafio anti-bot, tenta clicar e aguarda liberar. True se passou."""
+        if not await self._is_challenged(page):
+            return True
+        logger.warning("Desafio anti-bot detectado em %s — tentando liberar...", page.url)
+        await self._try_click_challenge(page)
+        # Aguarda a liberação automática (DataDome costuma liberar p/ navegador convincente).
+        for _ in range(max_wait_s // 2):
+            await page.wait_for_timeout(2000)
+            if not await self._is_challenged(page):
+                logger.info("Desafio liberado com sucesso.")
+                return True
+        logger.warning("Desafio anti-bot persistiu — conteúdo pode vir vazio/captcha.")
+        return False
+
+    async def _try_click_challenge(self, page) -> None:
+        """Tentativa best-effort de clicar no botão/checkbox do desafio."""
+        selectors = [
+            "text=Hacer clic para comprobar",
+            ".ctp-checkbox-label",
+            "input[type=checkbox]",
+            "#ddv1-captcha-container",
+        ]
+        for sel in selectors:
+            try:
+                el = page.locator(sel).first
+                if await el.count() > 0:
+                    await el.click(timeout=3000)
+                    await page.wait_for_timeout(2000)
+                    return
+            except Exception:
+                continue
+        # DataDome serve o captcha dentro de um iframe (captcha-delivery.com).
+        for frame in page.frames:
+            if "captcha-delivery" in (frame.url or ""):
+                for sel in [".ctp-checkbox-label", "input[type=checkbox]", "button"]:
+                    try:
+                        await frame.locator(sel).first.click(timeout=3000)
+                        await page.wait_for_timeout(2000)
+                        return
+                    except Exception:
+                        continue
+
+    # ---- Sessão manual (VNC) ------------------------------------------------
+
+    async def open_manual_session(self, url: str, proxy: Optional[str] = None) -> None:
+        """Abre uma janela visível (no display VNC) navegando até a URL.
+
+        O usuário resolve o captcha pelo noVNC; depois chama save/close para
+        gravar os cookies da sessão.
+        """
+        await self.start()
+        await self.close_manual_session(save=False)
+        self._manual_context = await self._new_context(proxy)
+        self._manual_page = await self._manual_context.new_page()
+        logger.info("Sessão manual aberta — navegando até %s", url)
+        try:
+            await self._manual_page.goto(url, wait_until="domcontentloaded", timeout=60000)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Sessão manual: falha ao navegar: %s", exc)
+
+    async def save_manual_session(self) -> None:
+        if self._manual_context:
+            await self._save_state(self._manual_context)
+            logger.info("Sessão manual: cookies salvos.")
+
+    async def close_manual_session(self, save: bool = True) -> None:
+        if self._manual_context:
+            if save:
+                try:
+                    await self._save_state(self._manual_context)
+                    logger.info("Sessão manual: cookies salvos.")
+                except Exception:  # noqa: BLE001
+                    pass
+            try:
+                await self._manual_context.close()
+            except Exception:  # noqa: BLE001
+                pass
+        self._manual_context = None
+        self._manual_page = None
+
+    def manual_active(self) -> bool:
+        return self._manual_context is not None
 
     async def _extract(self, page, selector: str, extract_mode: str) -> str:
         try:

@@ -49,10 +49,34 @@
 
       <div class="card form">
         <h3>🌐 Proxy global (opcional)</h3>
-        <p class="muted">Recomendado para Indeed/InfoJobs. Pode ser sobrescrito por alvo.</p>
+        <p class="muted">Pode ser sobrescrito por alvo. Em IP residencial geralmente não é necessário.</p>
         <label>Proxy
           <input type="text" id="set-proxy" placeholder="http://usuario:senha@host:porta" />
         </label>
+      </div>
+
+      <div class="card form">
+        <h3>🖐️ Resolver captcha manualmente (VNC)</h3>
+        <p class="muted">
+          Se o InfoJobs pedir captcha (“¿Eres humano?”), abra o navegador do servidor,
+          conecte pelo VNC, resolva uma vez com o mouse e salve. Os cookies ficam
+          guardados e as checagens automáticas passam a reutilizá-los.
+        </p>
+        <label>URL para abrir
+          <input type="text" id="solve-url" value="https://www.infojobs.net" />
+        </label>
+        <ol class="muted" style="margin:8px 0 12px; padding-left:20px; line-height:1.9">
+          <li>Clique em <b>Abrir navegador</b> (sobe a janela no servidor).</li>
+          <li>Clique em <b>Abrir VNC</b> — abre uma aba mostrando a tela do servidor.</li>
+          <li>Resolva o captcha com o mouse na aba do VNC.</li>
+          <li>Volte aqui e clique em <b>Salvar e fechar</b>.</li>
+        </ol>
+        <div class="row">
+          <button class="btn primary" id="btn-solve-start">1) Abrir navegador</button>
+          <a class="btn" id="btn-solve-vnc" target="_blank" rel="noopener">2) Abrir VNC</a>
+          <button class="btn" id="btn-solve-save">3) Salvar e fechar</button>
+        </div>
+        <small id="solve-msg" class="muted"></small>
       </div>
     </section>
 

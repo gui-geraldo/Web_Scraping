@@ -11,7 +11,7 @@ from .auth import auth_enabled
 from .config import FRONTEND_DIR
 from .database import init_db
 from .logging_conf import get_logger, setup_logging
-from .routers import logs, picker, settings, targets
+from .routers import logs, picker, settings, solve, targets
 from .scheduler import load_all_targets, start_scheduler, stop_scheduler
 from .scraper import browser_manager
 
@@ -39,6 +39,7 @@ app.include_router(targets.router)
 app.include_router(settings.router)
 app.include_router(logs.router)
 app.include_router(picker.router)
+app.include_router(solve.router)
 
 
 @app.get("/api/config")

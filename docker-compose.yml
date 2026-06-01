@@ -5,10 +5,12 @@ services:
     restart: unless-stopped
     ports:
       - "${APP_PORT:-8000}:8000"
+      - "${NOVNC_PORT:-6080}:6080"   # acesso VNC pelo navegador (resolver captcha)
     environment:
       - TZ=${TZ:-Europe/Madrid}
       - DATA_DIR=/data
       - ACCESS_TOKEN=${ACCESS_TOKEN:-}
+      - VNC_PASSWORD=${VNC_PASSWORD:-}
     volumes:
       - ./data:/data
     # Indeed/InfoJobs sobem vários processos do Chromium; damos memória de sobra.
