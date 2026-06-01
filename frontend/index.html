@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Vigia — Monitor de Páginas</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <header>
+    <h1>🛰️ Vigia</h1>
+    <nav>
+      <button class="tab active" data-tab="targets">Alvos</button>
+      <button class="tab" data-tab="settings">Configurações</button>
+      <button class="tab" data-tab="logs">Logs</button>
+    </nav>
+  </header>
+
+  <main>
+    <!-- ALVOS -->
+    <section id="tab-targets" class="tab-panel active">
+      <div class="panel-head">
+        <h2>Páginas monitoradas</h2>
+        <button class="btn primary" id="btn-add">+ Adicionar alvo</button>
+      </div>
+      <div id="targets-list" class="cards"></div>
+      <p id="targets-empty" class="muted hidden">Nenhum alvo ainda. Clique em “Adicionar alvo”.</p>
+    </section>
+
+    <!-- CONFIGURAÇÕES -->
+    <section id="tab-settings" class="tab-panel">
+      <h2>Configurações</h2>
+      <div class="card form">
+        <h3>📨 Telegram</h3>
+        <p class="muted">Crie um bot no <b>@BotFather</b>, copie o token e o chat_id do destino.</p>
+        <label>Token do bot (BotFather)
+          <input type="password" id="set-token" placeholder="123456:ABC-DEF..." autocomplete="off" />
+          <small id="token-status" class="muted"></small>
+        </label>
+        <label>Chat ID (destino dos alertas)
+          <input type="text" id="set-chat" placeholder="-1001234567890 ou seu ID numérico" />
+        </label>
+        <div class="row">
+          <button class="btn primary" id="btn-save-settings">Salvar</button>
+          <button class="btn" id="btn-test-telegram">Testar Telegram</button>
+        </div>
+        <small id="settings-msg" class="muted"></small>
+      </div>
+
+      <div class="card form">
+        <h3>🌐 Proxy global (opcional)</h3>
+        <p class="muted">Recomendado para Indeed/InfoJobs. Pode ser sobrescrito por alvo.</p>
+        <label>Proxy
+          <input type="text" id="set-proxy" placeholder="http://usuario:senha@host:porta" />
+        </label>
+      </div>
+    </section>
+
+    <!-- LOGS -->
+    <section id="tab-logs" class="tab-panel">
+      <div class="panel-head">
+        <h2>Logs</h2>
+        <div class="row">
+          <button class="btn" id="btn-log-events">Eventos</button>
+          <button class="btn" id="btn-log-raw">Log bruto</button>
+          <button class="btn" id="btn-log-refresh">↻ Atualizar</button>
+        </div>
+      </div>
+      <div id="logs-content" class="logbox"></div>
+    </section>
+  </main>
+
+  <!-- MODAL: formulário de alvo -->
+  <div id="modal" class="modal hidden">
+    <div class="modal-card">
+      <h3 id="modal-title">Novo alvo</h3>
+      <input type="hidden" id="f-id" />
+      <label>Nome
+        <input type="text" id="f-name" placeholder="Ex: Vagas Python — Indeed SP" />
+      </label>
+      <label>URL
+        <input type="url" id="f-url" placeholder="https://br.indeed.com/jobs?q=python&l=São+Paulo" />
+      </label>
+      <label>Seletor CSS (área a monitorar)
+        <div class="row">
+          <input type="text" id="f-selector" placeholder="body (página inteira)" />
+          <button class="btn" id="btn-pick">🎯 Selecionar visualmente</button>
+        </div>
+        <small class="muted">Deixe <code>body</code> para a página inteira, ou use o seletor visual.</small>
+      </label>
+      <div class="row">
+        <label class="grow">Modo
+          <select id="f-mode">
+            <option value="text">Texto (innerText)</option>
+            <option value="html">HTML</option>
+          </select>
+        </label>
+        <label class="grow">Frequência
+          <div class="row">
+            <input type="number" id="f-interval" min="1" value="5" />
+            <select id="f-interval-unit">
+              <option value="60" selected>minutos</option>
+              <option value="1">segundos</option>
+              <option value="3600">horas</option>
+            </select>
+          </div>
+        </label>
+      </div>
+      <label>Proxy específico deste alvo (opcional)
+        <input type="text" id="f-proxy" placeholder="herda o proxy global se vazio" />
+      </label>
+      <label class="check">
+        <input type="checkbox" id="f-enabled" checked /> Ativo
+      </label>
+
+      <div class="row test-row">
+        <button class="btn" id="btn-test-selector">Testar seletor</button>
+        <span id="test-result" class="muted"></span>
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn" id="btn-cancel">Cancelar</button>
+        <button class="btn primary" id="btn-save-target">Salvar alvo</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- OVERLAY: picker visual -->
+  <div id="picker" class="picker hidden">
+    <div class="picker-bar">
+      <span>Clique no elemento que deseja monitorar.</span>
+      <button class="btn" id="picker-close">Fechar</button>
+    </div>
+    <iframe id="picker-frame" sandbox="allow-same-origin allow-scripts"></iframe>
+  </div>
+
+  <!-- MODAL: token de acesso -->
+  <div id="auth-modal" class="modal hidden">
+    <div class="modal-card small">
+      <h3>🔒 Acesso restrito</h3>
+      <label>Token de acesso
+        <input type="password" id="auth-token" />
+      </label>
+      <div class="modal-actions">
+        <button class="btn primary" id="auth-submit">Entrar</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
